@@ -1,71 +1,56 @@
-/*
- * Copyright(C) 2007-2013 National Institute of Informatics, All rights reserved.
- */
 package app.checkin;
 
-import java.util.Date;
+import java.time.LocalDate;
 
 import app.AppException;
-import app.ManagerFactory;
-import domain.payment.PaymentManager;
-import domain.payment.PaymentException;
-import domain.reservation.ReservationManager;
-import domain.reservation.ReservationException;
-import domain.room.RoomManager;
-import domain.room.RoomException;
+import app.transaction.TransactionManager;
+import app.transaction.TransactionWork;
+import domain.DaoFactory;
+import domain.reservation.Reservation;
+import domain.reservation.ReservationDao;
 
 /**
- * Control class for Check-in Customer
- * 
+ * チェックインユースケースを制御する。
  */
 public class CheckInRoomControl {
 
+	private final ReservationDao reservationDao;
+
+	private final TransactionManager transactionManager;
+
+	public CheckInRoomControl() {
+		this(DaoFactory.getInstance().getReservationDao(),
+				DaoFactory.getInstance().getTransactionManager());
+	}
+
+	public CheckInRoomControl(ReservationDao reservationDao,
+			TransactionManager transactionManager) {
+		this.reservationDao = reservationDao;
+		this.transactionManager = transactionManager;
+	}
+
+	public Reservation checkIn(final String reservationNumber, final LocalDate today)
+			throws AppException {
+		if (reservationNumber == null || reservationNumber.trim().length() == 0) {
+			throw new AppException("予約番号を入力してください。");
+		}
+		return transactionManager.execute(new TransactionWork<Reservation>() {
+			public Reservation run() throws Exception {
+				Reservation reservation = reservationDao.findByNumber(reservationNumber);
+				if (reservation == null) {
+					throw new AppException("指定された予約は存在しません。");
+				}
+				reservation.checkIn(today);
+				reservationDao.update(reservation);
+				return reservation;
+			}
+		});
+	}
+
+	/**
+	 * 半完成コードのCUIとのコンパイル互換性を保つ。
+	 */
 	public String checkIn(String reservationNumber) throws AppException {
-		try {
-			//Consume reservation
-			ReservationManager reservationManager = getReservationManager();
-			Date stayingDate = reservationManager.consumeReservation(reservationNumber);
-
-			//Assign room
-			RoomManager roomManager = getRoomManager();
-			String roomNumber = roomManager.assignCustomer(stayingDate);
-
-			//Create payment
-			PaymentManager paymentManager = getPaymentManager();
-			paymentManager.createPayment(stayingDate, roomNumber);
-
-			return roomNumber;
-		}
-		catch (ReservationException e) {
-			AppException exception = new AppException("Failed to check-in", e);
-			exception.getDetailMessages().add(e.getMessage());
-			exception.getDetailMessages().addAll(e.getDetailMessages());
-			throw exception;
-
-		}
-		catch (RoomException e) {
-			AppException exception = new AppException("Failed to check-in", e);
-			exception.getDetailMessages().add(e.getMessage());
-			exception.getDetailMessages().addAll(e.getDetailMessages());
-			throw exception;
-		}
-		catch (PaymentException e) {
-			AppException exception = new AppException("Failed to check-in", e);
-			exception.getDetailMessages().add(e.getMessage());
-			exception.getDetailMessages().addAll(e.getDetailMessages());
-			throw exception;
-		}
-	}
-
-	private ReservationManager getReservationManager() {
-		return ManagerFactory.getInstance().getReservationManager();
-	}
-
-	private RoomManager getRoomManager() {
-		return ManagerFactory.getInstance().getRoomManager();
-	}
-
-	private PaymentManager getPaymentManager() {
-		return ManagerFactory.getInstance().getPaymentManager();
+		return checkIn(reservationNumber, LocalDate.now()).getRoom().getRoomNumber();
 	}
 }

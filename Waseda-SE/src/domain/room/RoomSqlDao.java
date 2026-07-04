@@ -1,200 +1,112 @@
-/*
- * Copyright(C) 2007-2013 National Institute of Informatics, All rights reserved.
- */
 package domain.room;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
+import java.sql.Date;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-import util.DateUtil;
+import domain.RepositoryException;
+import infrastructure.jdbc.JdbcConnectionManager;
 
 /**
- * DB SQL implementation of Room Data Object interface<br>
- * 
+ * JDBCによる部屋DAO。
  */
 public class RoomSqlDao implements RoomDao {
 
-	private static final String ID = "sa";
+	public List<Room> findAll() throws RepositoryException {
+		Connection connection = null;
+		List<Room> rooms = new ArrayList<Room>();
+		try {
+			connection = JdbcConnectionManager.getInstance().getConnection();
+			try (PreparedStatement statement = connection.prepareStatement(
+					"SELECT ROOM_NUMBER FROM ROOMS ORDER BY ROOM_NUMBER");
+					ResultSet resultSet = statement.executeQuery()) {
+				while (resultSet.next()) {
+					rooms.add(new Room(resultSet.getString("ROOM_NUMBER")));
+				}
+			}
+			return rooms;
+		}
+		catch (SQLException e) {
+			throw new RepositoryException("部屋一覧の取得に失敗しました。", e);
+		}
+		finally {
+			JdbcConnectionManager.getInstance().closeIfStandalone(connection);
+		}
+	}
 
-	private static final String PASSWORD = "";
+	public Room findAvailable(LocalDate checkInDate) throws RepositoryException {
+		Connection connection = null;
+		try {
+			connection = JdbcConnectionManager.getInstance().getConnection();
+			try (PreparedStatement statement = connection.prepareStatement(
+					"SELECT R.ROOM_NUMBER FROM ROOMS R "
+					+ "WHERE NOT EXISTS ("
+					+ "SELECT 1 FROM ROOM_ALLOCATIONS A "
+					+ "WHERE A.ROOM_NUMBER = R.ROOM_NUMBER AND A.CHECK_IN_DATE = ?) "
+					+ "ORDER BY R.ROOM_NUMBER")) {
+				statement.setDate(1, Date.valueOf(checkInDate));
+				try (ResultSet resultSet = statement.executeQuery()) {
+					return resultSet.next() ? new Room(resultSet.getString("ROOM_NUMBER")) : null;
+				}
+			}
+		}
+		catch (SQLException e) {
+			throw new RepositoryException("空室の検索に失敗しました。", e);
+		}
+		finally {
+			JdbcConnectionManager.getInstance().closeIfStandalone(connection);
+		}
+	}
 
-	private static final String DRIVER_NAME = "org.hsqldb.jdbcDriver";
+	public Room findByNumber(String roomNumber) throws RepositoryException {
+		Connection connection = null;
+		try {
+			connection = JdbcConnectionManager.getInstance().getConnection();
+			try (PreparedStatement statement = connection.prepareStatement(
+					"SELECT ROOM_NUMBER FROM ROOMS WHERE ROOM_NUMBER = ?")) {
+				statement.setString(1, roomNumber);
+				try (ResultSet resultSet = statement.executeQuery()) {
+					return resultSet.next() ? new Room(resultSet.getString("ROOM_NUMBER")) : null;
+				}
+			}
+		}
+		catch (SQLException e) {
+			throw new RepositoryException("部屋の取得に失敗しました。", e);
+		}
+		finally {
+			JdbcConnectionManager.getInstance().closeIfStandalone(connection);
+		}
+	}
 
-	private static final String URL = "jdbc:hsqldb:hsql://localhost;shutdown=true";
-
-	private static final String TABLE_NAME = "ROOM";
-
-	/**
-	 * @see domain.room.RoomDao#getRooms()
-	 */
+	// 半完成コードとのコンパイル互換性を保つ旧インタフェース。
 	public List getRooms() throws RoomException {
-		StringBuffer sql = new StringBuffer();
-		Statement statement = null;
-		ResultSet resultSet = null;
-		Connection connection = null;
-		List roomList = new ArrayList();
 		try {
-			connection = getConnection();
-			statement = connection.createStatement();
-			sql.append("SELECT roomnumber FROM ");
-			sql.append(TABLE_NAME);
-			sql.append(";");
-			resultSet = statement.executeQuery(sql.toString());
-			while (resultSet.next()) {
-				roomList.add(resultSet.getString("roomnumber"));
-			}
+			return findAll();
 		}
-		catch (SQLException e) {
-			RoomException exception = new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
-			exception.getDetailMessages().add("getRooms()");
-			throw exception;
+		catch (RepositoryException e) {
+			throw new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
 		}
-		finally {
-			close(resultSet, statement, connection);
-		}
-		return roomList;
 	}
 
-	/**
-	 * @see domain.room.RoomDao#getRoom(java.lang.String)
-	 */
-	public Room getRoom(String roomNumber) throws RoomException {
-		StringBuffer sql = new StringBuffer();
-		Statement statement = null;
-		ResultSet resultSet = null;
-		Connection connection = null;
-		Room room = null;
-		try {
-			connection = getConnection();
-			statement = connection.createStatement();
-			sql.append("SELECT roomnumber, stayingdate FROM ");
-			sql.append(TABLE_NAME);
-			sql.append(" WHERE ROOMNUMBER='");
-			sql.append(roomNumber);
-			sql.append("';");
-
-			resultSet = statement.executeQuery(sql.toString());
-			if (resultSet.next() == true) {
-				room = new Room();
-				room.setRoomNumber(roomNumber);
-				room.setStayingDate(DateUtil.convertToDate(resultSet.getString("stayingDate")));
-			}
-		}
-		catch (SQLException e) {
-			RoomException exception = new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
-			exception.getDetailMessages().add("getRoom()");
-			throw exception;
-		}
-		finally {
-			close(resultSet, statement, connection);
-		}
-		return room;
-	}
-
-	/**
-	 * @see domain.room.RoomDao#getEmptyRooms()
-	 */
 	public List getEmptyRooms() throws RoomException {
-		StringBuffer sql = new StringBuffer();
-		Statement statement = null;
-		ResultSet resultSet = null;
-		Connection connection = null;
-		List emptyRoomList = new ArrayList();
-		try {
-			connection = getConnection();
-			statement = connection.createStatement();
-			sql.append("SELECT roomnumber FROM ");
-			sql.append(TABLE_NAME);
-			sql.append(" WHERE stayingdate='';");
-			resultSet = statement.executeQuery(sql.toString());
-			while (resultSet.next()) {
-				Room room = new Room();
-				room.setRoomNumber(resultSet.getString("roomnumber"));
-				emptyRoomList.add(room);
-			}
-		}
-		catch (SQLException e) {
-			RoomException exception = new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
-			exception.getDetailMessages().add("getEmptyRooms()");
-			throw exception;
-		}
-		finally {
-			close(resultSet, statement, connection);
-		}
-		return emptyRoomList;
+		return getRooms();
 	}
 
-	/**
-	 * @see domain.room.RoomDao#updateRoom(domain.room.Room)
-	 */
+	public Room getRoom(String roomNumber) throws RoomException {
+		try {
+			return findByNumber(roomNumber);
+		}
+		catch (RepositoryException e) {
+			throw new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
+		}
+	}
+
 	public void updateRoom(Room room) throws RoomException {
-		StringBuffer sql = new StringBuffer();
-		Statement statement = null;
-		Connection connection = null;
-		ResultSet resultSet = null;
-		try {
-			connection = getConnection();
-			statement = connection.createStatement();
-			sql.append("UPDATE ");
-			sql.append(TABLE_NAME);
-			sql.append(" SET stayingdate =");
-			//Room status and staying date share the same portion on DB table
-			if (room.getStayingDate() == null) {
-				sql.append("''");
-			}
-			else {
-				sql.append("'");
-				sql.append(DateUtil.convertToString(room.getStayingDate()));
-				sql.append("'");
-			}
-			sql.append(" WHERE roomnumber='");
-			sql.append(room.getRoomNumber());
-			sql.append("';");
-			resultSet = statement.executeQuery(sql.toString());
-		}
-		catch (SQLException e) {
-			RoomException exception = new RoomException(RoomException.CODE_DB_EXEC_QUERY_ERROR, e);
-			exception.getDetailMessages().add("updateRoom()");
-			throw exception;
-		}
-		finally {
-			close(resultSet, statement, connection);
-		}
-
-	}
-
-	private Connection getConnection() throws RoomException {
-		Connection connection = null;
-		try {
-			Class.forName(DRIVER_NAME);
-			connection = DriverManager.getConnection(URL, ID, PASSWORD);
-		}
-		catch (Exception e) {
-			throw new RoomException(RoomException.CODE_DB_CONNECT_ERROR, e);
-		}
-		return connection;
-	}
-
-	private void close(ResultSet resultSet, Statement statement, Connection connection)
-			throws RoomException {
-		try {
-			if (resultSet != null) {
-				resultSet.close();
-			}
-			if (statement != null) {
-				statement.close();
-			}
-			if (connection != null) {
-				connection.close();
-			}
-		}
-		catch (SQLException e) {
-			throw new RoomException(RoomException.CODE_DB_CLOSE_ERROR, e);
-		}
+		// 新設計では部屋の利用状況をROOM_ALLOCATIONSで管理する。
 	}
 }

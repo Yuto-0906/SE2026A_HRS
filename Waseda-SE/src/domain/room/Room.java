@@ -15,6 +15,13 @@ public class Room {
 
 	private Date stayingDate;
 
+	public Room() {
+	}
+
+	public Room(String roomNumber) {
+		this.roomNumber = roomNumber;
+	}
+
 	public String getRoomNumber() {
 		return roomNumber;
 	}
