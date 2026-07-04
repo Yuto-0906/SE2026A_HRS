@@ -1,3 +1,6 @@
 *.lock
 .DS_Store
 /tmp
+/Waseda-SE/bin
+*.lck
+*.log

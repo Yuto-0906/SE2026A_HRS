@@ -1,53 +1,62 @@
-/*
- * Copyright(C) 2007-2013 National Institute of Informatics, All rights reserved.
- */
 package app.checkout;
 
-import java.util.Date;
+import java.time.LocalDate;
 
 import app.AppException;
-import app.ManagerFactory;
-import domain.payment.PaymentManager;
-import domain.payment.PaymentException;
-import domain.room.RoomManager;
-import domain.room.RoomException;
+import app.transaction.TransactionManager;
+import app.transaction.TransactionWork;
+import domain.DaoFactory;
+import domain.reservation.Reservation;
+import domain.reservation.ReservationDao;
 
 /**
- * Control class for Check-out Customer
- * 
+ * チェックアウトユースケースを制御する。
  */
 public class CheckOutRoomControl {
-	
-	public void checkOut(String roomNumber) throws AppException {
-		try {
-			//Clear room
-			/*
-			 * Your code for clearing room by using domain.room.RoomManager
-			 */
-			//Consume payment
-			/*
-			 * Your code for consuming payment by using domain.payment.PaymentManager
-			 */
-		}
-		catch (RoomException e) {
-			AppException exception = new AppException("Failed to check-out", e);
-			exception.getDetailMessages().add(e.getMessage());
-			exception.getDetailMessages().addAll(e.getDetailMessages());
-			throw exception;
-		}
-		catch (PaymentException e) {
-			AppException exception = new AppException("Failed to check-out", e);
-			exception.getDetailMessages().add(e.getMessage());
-			exception.getDetailMessages().addAll(e.getDetailMessages());
-			throw exception;
-		}
+
+	public static final int CHARGE = 6000;
+
+	private final ReservationDao reservationDao;
+
+	private final TransactionManager transactionManager;
+
+	public CheckOutRoomControl() {
+		this(DaoFactory.getInstance().getReservationDao(),
+				DaoFactory.getInstance().getTransactionManager());
 	}
 
-	private RoomManager getRoomManager() {
-		return ManagerFactory.getInstance().getRoomManager();
+	public CheckOutRoomControl(ReservationDao reservationDao,
+			TransactionManager transactionManager) {
+		this.reservationDao = reservationDao;
+		this.transactionManager = transactionManager;
 	}
 
-	private PaymentManager getPaymentManager() {
-		return ManagerFactory.getInstance().getPaymentManager();
+	public Reservation checkOut(final String reservationNumber, final LocalDate today)
+			throws AppException {
+		if (reservationNumber == null || reservationNumber.trim().length() == 0) {
+			throw new AppException("予約番号を入力してください。");
+		}
+		return transactionManager.execute(new TransactionWork<Reservation>() {
+			public Reservation run() throws Exception {
+				Reservation reservation = reservationDao.findByNumber(reservationNumber);
+				if (reservation == null) {
+					throw new AppException("指定された予約は存在しません。");
+				}
+				reservation.checkOut(today);
+				reservationDao.update(reservation);
+				return reservation;
+			}
+		});
+	}
+
+	public int getCharge() {
+		return CHARGE;
+	}
+
+	/**
+	 * 半完成コードのCUIとのコンパイル互換性を保つ。
+	 */
+	public void checkOut(String reservationNumber) throws AppException {
+		checkOut(reservationNumber, LocalDate.now());
 	}
 }

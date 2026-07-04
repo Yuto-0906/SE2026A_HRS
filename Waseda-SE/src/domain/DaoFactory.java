@@ -3,6 +3,7 @@
  */
 package domain;
 
+import app.transaction.TransactionManager;
 import domain.payment.PaymentDao;
 import domain.payment.PaymentSqlDao;
 import domain.reservation.ReservationDao;
@@ -11,6 +12,9 @@ import domain.room.AvailableQtyDao;
 import domain.room.AvailableQtySqlDao;
 import domain.room.RoomDao;
 import domain.room.RoomSqlDao;
+import domain.user.UserDao;
+import domain.user.UserSqlDao;
+import infrastructure.jdbc.JdbcTransactionManager;
 
 /**
  * Factory class for generating instance of any Data Object class
@@ -27,6 +31,10 @@ public class DaoFactory {
 	private AvailableQtyDao availableQtyDao = new AvailableQtySqlDao();
 
 	private PaymentDao paymentDao = new PaymentSqlDao();
+
+	private UserDao userDao = new UserSqlDao();
+
+	private TransactionManager transactionManager = new JdbcTransactionManager();
 
 	private DaoFactory() {
 	}
@@ -49,5 +57,13 @@ public class DaoFactory {
 
 	public PaymentDao getPaymentDao() {
 		return paymentDao;
+	}
+
+	public UserDao getUserDao() {
+		return userDao;
+	}
+
+	public TransactionManager getTransactionManager() {
+		return transactionManager;
 	}
 }
