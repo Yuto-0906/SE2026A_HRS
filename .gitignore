@@ -4,3 +4,5 @@
 /Waseda-SE/bin
 *.lck
 *.log
+/report
+/slides
